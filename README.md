@@ -1,2 +1,2 @@
-# golang-fem
-Finite Element Method homework write in golang
+# gofem
+Finite Element Method homework written in go
