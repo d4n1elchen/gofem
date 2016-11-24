@@ -9,17 +9,9 @@ const FORCED = 3e+33
 var DEBUG = true
 
 type FEMsolver interface {
-  CalcN()
+  AddBodyForce(func (float64) float64)
   CalcK()
   Solve()
-}
-
-type FEMsolver1d struct {
-  k, K *mat64.SymDense
-  Ne int
-  Le, E, A, u, f *mat64.Vector
-  uNod, fNod []int
-  uVal, fVal []float64
 }
 
 func BuildVec(nod []int, val []float64, vec *mat64.Vector) {
@@ -28,7 +20,6 @@ func BuildVec(nod []int, val []float64, vec *mat64.Vector) {
   }
 }
 
-// TODO: Implement GausQuad
 func GausQuad(f func(float64) float64, a, b float64, num int) float64 {
   pt, w := getGausQuadPoint(num)
   f = changeInterval(f, a, b)
@@ -65,14 +56,14 @@ func changeInterval(f func (float64) float64, a, b float64) func (float64) float
   }
 }
 
-func InitF (Ne int, uNod, fNod []int, fVal []float64) ([]int, []float64) {
+func InitF (Nn int, uNod, fNod []int, fVal []float64) ([]int, []float64) {
   uNum := len(uNod)
   fNum := len(fNod)
-  nfNum := Ne+1-uNum
+  nfNum := Nn-uNum
   nfNod := make([]int, nfNum)
   nfVal := make([]float64, nfNum)
   c, j, k := 0, 0, 0
-  for i := 0; i < Ne; i++ {
+  for i := 0; i < Nn; i++ {
     if j < uNum && uNod[j] == i {
       j++
     } else if c < nfNum {
@@ -87,6 +78,14 @@ func InitF (Ne int, uNod, fNod []int, fVal []float64) ([]int, []float64) {
   return nfNod, nfVal
 }
 
+type FEMsolver1d struct {
+  k, K *mat64.SymDense
+  Ne int
+  Le, E, A, u, f *mat64.Vector
+  uNod, fNod []int
+  uVal, fVal []float64
+}
+
 func NewFEMsolver1d(Ne int, Le, E, A, u, f *mat64.Vector, uNod, fNod []int, uVal, fVal []float64) *FEMsolver1d {
   k := mat64.NewSymDense(2, []float64{
     1, -1,
@@ -94,7 +93,7 @@ func NewFEMsolver1d(Ne int, Le, E, A, u, f *mat64.Vector, uNod, fNod []int, uVal
   })
   K := mat64.NewSymDense(Ne+1, nil)
   BuildVec(uNod, uVal, u)
-  fNod, fVal = InitF(Ne, uNod, fNod, fVal)
+  fNod, fVal = InitF(Ne+1, uNod, fNod, fVal)
   BuildVec(fNod, fVal, f)
   return &FEMsolver1d{k, K, Ne, Le, E, A, u, f, uNod, fNod, uVal, fVal}
 }
@@ -113,8 +112,44 @@ func NewFEMsolver1dConstLeEA(Ne int, Le, E, A float64, u, f *mat64.Vector, uNod,
   return NewFEMsolver1d(Ne, LeV, EV, AV, u, f, uNod, fNod, uVal, fVal)
 }
 
-// TODO: Implement CalcN()
-func (fem *FEMsolver1d) CalcN() {
+func (fem *FEMsolver1d) NElem(i, e int) func(float64) float64 {
+  Le := fem.Le.At(e, 0)
+  x1 := Le * float64(e)
+  x2 := x1 + Le
+  return func(x float64) float64 {
+    return []float64{(x2-x)/Le, (x-x1)/Le}[i]
+  }
+}
+
+func (fem *FEMsolver1d) BElem(i, e int) func(float64) float64 {
+  Le := fem.Le.At(e, 0)
+  return func(x float64) float64 {
+    return []float64{1/Le, -1/Le}[i]
+  }
+}
+
+func (fem *FEMsolver1d) AddBodyForce(b func(float64) float64) {
+  for i := 0; i < fem.Ne; i++ {
+
+    N0 := fem.NElem(0, i)
+    N1 := fem.NElem(1, i)
+    f0 := GausQuad(func(x float64) float64 {return N0(x)*b(x)},
+            float64(i)*fem.Le.At(i, 0),
+            float64(i+1)*fem.Le.At(i, 0), 3)
+    f1 := GausQuad(func(x float64) float64 {return N1(x)*b(x)},
+            float64(i)*fem.Le.At(i, 0),
+            float64(i+1)*fem.Le.At(i, 0), 3)
+
+    for j, v := range fem.fNod {
+      switch v {
+      case i:
+        fem.fVal[j] += f0
+      case i+1:
+        fem.fVal[j] += f1
+      }
+    }
+    BuildVec(fem.fNod, fem.fVal, fem.f)
+  }
 }
 
 func (fem *FEMsolver1d) CalcK() {
@@ -184,8 +219,9 @@ func (fem *FEMsolver1d) Solve() {
   uNum := len(fem.uNod)
   for i := 0; i < uNum; i++ {
     fi := fem.uNod[i]
-    for j := 0; j < fem.Ne; j++ {
-      fem.f.SetVec(fi, fem.f.At(fi, 0)+fem.K.At(fi, j)*fem.u.At(j, 0))
+    for j := 0; j < fem.Ne+1; j++ {
+      fv := fem.f.At(fi, 0)+fem.K.At(fi, j)*fem.u.At(j, 0)
+      fem.f.SetVec(fi, fv)
     }
   }
   fmt.Printf("f = %0.4v\n", mat64.Formatted(fem.f, mat64.Prefix("    ")))

@@ -8,27 +8,28 @@ import (
 )
 
 func main() {
-  femsolver.DEBUG = false
+  femsolver.DEBUG = true
 
   var fem femsolver.FEMsolver
-  Ne := 12
-  E := 70e+9
-  A := 0.03
-  L := 3.0
+  Ne := 2
+  E := 100e+9
+  A := 0.0001
+  L := 2.0
 
-  uNod := []int{0, Ne}
-  uVal := []float64{0, 0}
+  uNod := []int{0}
+  uVal := []float64{0}
   u := mat64.NewVector(Ne+1, nil)
 
-  fNod := []int{8}
-  fVal := []float64{5000.0}
+  fNod := []int{}
+  fVal := []float64{}
   f := mat64.NewVector(Ne+1, nil)
 
   fem = femsolver.NewFEMsolver1dConstLeEA(Ne, L/float64(Ne), E, A, u, f, uNod, fNod, uVal, fVal)
+  fem.AddBodyForce(b)
   fem.CalcK()
   fem.Solve()
 
-  gausXSin := femsolver.GausQuad(fx, -5, 5, 4)
+  gausXSin := femsolver.GausQuad(fx, -5, 5, 3)
   analXSin := ff(5) - ff(-5)
   fmt.Printf("gaussian: inte x*Sin(x) from -5 to 5 = %v\n", gausXSin)
   fmt.Printf("analysis: inte x*Sin(x) from -5 to 5 = %v\n", analXSin)
@@ -37,9 +38,13 @@ func main() {
 }
 
 func fx(x float64) float64 {
-  return math.Pow(x,2) + x + 1
+  return 0.8*x + 1.2345
 }
 
 func ff(x float64) float64 {
-  return math.Pow(x,3)/3 + math.Pow(x,2)/2 + x
+  return math.Pow(x,2)*0.4 + 1.2345*x
+}
+
+func b(x float64) float64 {
+  return 1000
 }
