@@ -12,20 +12,22 @@ func main() {
 
   var fem femsolver.FEMsolver
   Ne := 2
+  Nn := 6
   E := 100e+9
   A := 0.0001
   L := 2.0
 
   uNod := []int{0}
   uVal := []float64{0}
-  u := mat64.NewVector(Ne+1, nil)
+  u := mat64.NewVector((Nn-1)*Ne+1, nil)
 
   fNod := []int{}
   fVal := []float64{}
-  f := mat64.NewVector(Ne+1, nil)
+  f := mat64.NewVector((Nn-1)*Ne+1, nil)
 
-  fem = femsolver.NewFEMsolver1dConstLeEA(Ne, L/float64(Ne), E, A, u, f, uNod, fNod, uVal, fVal)
+  fem = femsolver.NewFEMsolver1dConstLeEA(Nn, Ne, L/float64(Ne), E, A, u, f, uNod, fNod, uVal, fVal)
   fem.AddBodyForce(b)
+  fem.CalcLocK()
   fem.CalcK()
   fem.Solve()
 
