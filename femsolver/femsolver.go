@@ -88,7 +88,7 @@ func InitF (Nn int, uNod, fNod []int, fVal []float64) ([]int, []float64) {
   return nfNod, nfVal
 }
 
-// Linear-element FEM solver for column
+// Linear-element FEM solver for bar
 // k: local stifness matrix
 // K: global stifness matrix
 // Ne: amount of element
@@ -99,7 +99,7 @@ func InitF (Nn int, uNod, fNod []int, fVal []float64) ([]int, []float64) {
 // f: force vector
 // uNod, uVal: displacement boundary condition
 // fNod, fVal: force boundary condition
-type FEMsolver1d struct {
+type FEMsolver1dBar struct {
   k, K *mat64.SymDense
   Ne, No, Ng int
   Le, E, A, u, f *mat64.Vector
@@ -107,19 +107,19 @@ type FEMsolver1d struct {
   uVal, fVal []float64
 }
 
-// Create a FEMsolver1d
-func NewFEMsolver1d(No, Ne int, Le, E, A, u, f *mat64.Vector, uNod, fNod []int, uVal, fVal []float64) *FEMsolver1d {
+// Create a FEMsolver1dBar
+func NewFEMsolver1dBar(No, Ne int, Le, E, A, u, f *mat64.Vector, uNod, fNod []int, uVal, fVal []float64) *FEMsolver1dBar {
   k := mat64.NewSymDense(No, nil)
   K := mat64.NewSymDense((No-1)*Ne+1, nil)
   BuildVec(uNod, uVal, u)
   fNod, fVal = InitF((No-1)*Ne+1, uNod, fNod, fVal)
   BuildVec(fNod, fVal, f)
   Ng := (No+1)/2 + 1
-  return &FEMsolver1d{k, K, Ne, No, Ng, Le, E, A, u, f, uNod, fNod, uVal, fVal}
+  return &FEMsolver1dBar{k, K, Ne, No, Ng, Le, E, A, u, f, uNod, fNod, uVal, fVal}
 }
 
-// Create a FEMsolver1d with const Le, E and A
-func NewFEMsolver1dConstLeEA(No, Ne int, Le, E, A float64, u, f *mat64.Vector, uNod, fNod []int, uVal, fVal []float64) *FEMsolver1d {
+// Create a FEMsolver1dBar with const Le, E and A
+func NewFEMsolver1dBarConstLeEA(No, Ne int, Le, E, A float64, u, f *mat64.Vector, uNod, fNod []int, uVal, fVal []float64) *FEMsolver1dBar {
 
   LeV := mat64.NewVector(Ne+1, nil)
   EV := mat64.NewVector(Ne+1, nil)
@@ -130,11 +130,11 @@ func NewFEMsolver1dConstLeEA(No, Ne int, Le, E, A float64, u, f *mat64.Vector, u
     AV.SetVec(i, A)
   }
 
-  return NewFEMsolver1d(No, Ne, LeV, EV, AV, u, f, uNod, fNod, uVal, fVal)
+  return NewFEMsolver1dBar(No, Ne, LeV, EV, AV, u, f, uNod, fNod, uVal, fVal)
 }
 
 // Return shape function of e-th element
-func (fem *FEMsolver1d) NElem(j, e int) func(float64) float64 {
+func (fem *FEMsolver1dBar) NElem(j, e int) func(float64) float64 {
   Le := fem.Le.At(e, 0)
   pLe := Le / float64(fem.No-1)
   xe := make([]float64, fem.No)
@@ -153,7 +153,7 @@ func (fem *FEMsolver1d) NElem(j, e int) func(float64) float64 {
 }
 
 // Return derivative shape function of e-th element
-func (fem *FEMsolver1d) BElem(j, e int) func(float64) float64 {
+func (fem *FEMsolver1dBar) BElem(j, e int) func(float64) float64 {
   Le := fem.Le.At(e, 0)
   pLe := Le / float64(fem.No-1)
   xe := make([]float64, fem.No)
@@ -178,7 +178,7 @@ func (fem *FEMsolver1d) BElem(j, e int) func(float64) float64 {
 }
 
 // Add body force (or distributed force) b to the solver
-func (fem *FEMsolver1d) AddBodyForce(b func(float64) float64) {
+func (fem *FEMsolver1dBar) AddBodyForce(b func(float64) float64) {
   fmt.Println("Add body force to force vector ...")
   for i := 0; i < fem.Ne; i++ {
     for j := 0; j < fem.No; j++ {
@@ -203,7 +203,7 @@ func (fem *FEMsolver1d) AddBodyForce(b func(float64) float64) {
 }
 
 // Calculate local k matrix
-func (fem *FEMsolver1d) CalcLocK() {
+func (fem *FEMsolver1dBar) CalcLocK() {
   fmt.Println("Calc local stifness matrix ...")
   for i := 0; i < fem.No; i++ {
     for j := 0; j < fem.No; j++ {
@@ -220,7 +220,7 @@ func (fem *FEMsolver1d) CalcLocK() {
 }
 
 // Calculate the global K matrix
-func (fem *FEMsolver1d) CalcK() {
+func (fem *FEMsolver1dBar) CalcK() {
   fmt.Println("Calc stifness matrix ...")
   for k := 0; k < fem.Ne; k++ {
     var kloc mat64.SymDense
@@ -245,7 +245,7 @@ func (fem *FEMsolver1d) CalcK() {
 }
 
 // Solve the problem
-func (fem *FEMsolver1d) Solve() {
+func (fem *FEMsolver1dBar) Solve() {
   fmt.Println("Solving ...")
 
   fNum := len(fem.fNod)

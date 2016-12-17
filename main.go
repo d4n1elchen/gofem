@@ -25,7 +25,7 @@ func main() {
   fVal := []float64{}
   f := mat64.NewVector((Nn-1)*Ne+1, nil)
 
-  fem = femsolver.NewFEMsolver1dConstLeEA(Nn, Ne, L/float64(Ne), E, A, u, f, uNod, fNod, uVal, fVal)
+  fem = femsolver.NewFEMsolver1dBarConstLeEA(Nn, Ne, L/float64(Ne), E, A, u, f, uNod, fNod, uVal, fVal)
   fem.AddBodyForce(b)
   fem.CalcLocK()
   fem.CalcK()
