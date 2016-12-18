@@ -32,14 +32,16 @@ func main() {
   // fem.Solve()
 
   var fem femsolver.FEMsolver
-  Ne := 2
+  Ne := 10
   Nn := 2
   E := 200e+9
-  I := 1e-6
-  L := 2.0
+  I := 5e-6
+  L := 10.0
 
-  dNod := []int{0, 1}
-  dVal := []float64{0, 0}
+  dNod := []int{0, 1, Ne, 2*Ne}
+  dVal := []float64{0, 0, 0, 0}
+  // dNod := []int{0, 1}
+  // dVal := []float64{0, 0}
   d := mat64.NewVector(2*(Nn-1)*Ne+2, nil)
 
   fNod := []int{}
@@ -47,7 +49,9 @@ func main() {
   f := mat64.NewVector(2*(Nn-1)*Ne+2, nil)
 
   fem = femsolver.NewFEMsolver1dBeamConstLeEI(Nn, Ne, L/float64(Ne), E, I, d, f, dNod, fNod, dVal, fVal)
-  fem.AddBodyForce(q, 4)
+  // fem.AddBodyForce(q, 4)
+  fem.AddBodyForce(q1, 4)
+  fem.AddBodyForce(q2, 4)
   fem.CalcLocK()
   fem.CalcK()
   fem.Solve()
@@ -78,7 +82,7 @@ func q(x float64) float64 {
 
 func q1(x float64) float64 {
   if x < 5 {
-    return 12.0 + 12.0*x/5.0
+    return 12
   } else {
     return 0
   }

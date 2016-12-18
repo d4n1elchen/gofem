@@ -203,6 +203,10 @@ func (fem *FEMsolver1dBar) AddBodyForce(b func(float64) float64, Ng int) {
       }
     }
     BuildVec(fem.fNod, fem.fVal, fem.f)
+    if DEBUG {
+      fmt.Println(fem.fNod)
+      fmt.Println(fem.fVal)
+    }
   }
   if DEBUG {
     fmt.Println(fem.fNod)
@@ -458,13 +462,8 @@ func (fem *FEMsolver1dBeam) AddBodyForce(b func(float64) float64, Ng int) {
       fj := GausQuad(func(x float64) float64 {return Nj(x)*b(x)},
               float64(i)*fem.Le.At(i, 0),
               float64(i+1)*fem.Le.At(i, 0), Ng)
-      fmt.Println(Nj(0))
-      fmt.Println(Nj(2))
-      fmt.Println(b(0))
-      fmt.Println(b(2))
-      fmt.Println(fj)
       for k, v := range fem.fNod {
-        if v == (fem.No-1)*i+j {
+        if v == (fem.No-1)*2*i+j {
           fem.fVal[k] += fj
         }
       }
