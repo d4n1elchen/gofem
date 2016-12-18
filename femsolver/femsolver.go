@@ -2,10 +2,10 @@ package femsolver
 
 import (
   "fmt"
+  "math"
   "github.com/gonum/matrix/mat64"
 )
 
-const FORCED = 3e+33
 var DEBUG = true
 
 type FEMsolver interface {
@@ -65,33 +65,12 @@ func changeInterval(f func (float64) float64, a, b float64) func (float64) float
   }
 }
 
-// Initialize the force boundary condition
-func InitF (Nn int, uNod, fNod []int, fVal []float64) ([]int, []float64) {
-  uNum := len(uNod)
-  fNum := len(fNod)
-  nfNum := Nn-uNum
-  nfNod := make([]int, nfNum)
-  nfVal := make([]float64, nfNum)
-  c, j, k := 0, 0, 0
-  for i := 0; i < Nn; i++ {
-    if j < uNum && uNod[j] == i {
-      j++
-    } else if c < nfNum {
-      nfNod[c] = i
-      if k < fNum && fNod[k] == i {
-        nfVal[c] = fVal[k]
-        k++
-      }
-      c++
-    }
-  }
-  return nfNod, nfVal
-}
-
 // Linear-element FEM solver for bar
 // k: local stifness matrix
 // K: global stifness matrix
 // Ne: amount of element
+// No: order of shape function
+// Ng: amount of gaussian points
 // Le: lenth of each element
 // E: Young's modulus of each element
 // A: area of each element
@@ -112,7 +91,7 @@ func NewFEMsolver1dBar(No, Ne int, Le, E, A, u, f *mat64.Vector, uNod, fNod []in
   k := mat64.NewSymDense(No, nil)
   K := mat64.NewSymDense((No-1)*Ne+1, nil)
   BuildVec(uNod, uVal, u)
-  fNod, fVal = InitF((No-1)*Ne+1, uNod, fNod, fVal)
+  fNod, fVal = InitF1dBar((No-1)*Ne+1, uNod, fNod, fVal)
   BuildVec(fNod, fVal, f)
   Ng := (No+1)/2 + 1
   return &FEMsolver1dBar{k, K, Ne, No, Ng, Le, E, A, u, f, uNod, fNod, uVal, fVal}
@@ -131,6 +110,29 @@ func NewFEMsolver1dBarConstLeEA(No, Ne int, Le, E, A float64, u, f *mat64.Vector
   }
 
   return NewFEMsolver1dBar(No, Ne, LeV, EV, AV, u, f, uNod, fNod, uVal, fVal)
+}
+
+// Initialize the force boundary condition
+func InitF1dBar (Nn int, uNod, fNod []int, fVal []float64) ([]int, []float64) {
+  uNum := len(uNod)
+  fNum := len(fNod)
+  nfNum := Nn-uNum
+  nfNod := make([]int, nfNum)
+  nfVal := make([]float64, nfNum)
+  c, j, k := 0, 0, 0
+  for i := 0; i < Nn; i++ {
+    if j < uNum && uNod[j] == i {
+      j++
+    } else if c < nfNum {
+      nfNod[c] = i
+      if k < fNum && fNod[k] == i {
+        nfVal[c] = fVal[k]
+        k++
+      }
+      c++
+    }
+  }
+  return nfNod, nfVal
 }
 
 // Return shape function of e-th element
@@ -291,6 +293,228 @@ func (fem *FEMsolver1dBar) Solve() {
     fi := fem.uNod[i]
     for j := 0; j < fem.Ne+1; j++ {
       fv := fem.f.At(fi, 0)+fem.K.At(fi, j)*fem.u.At(j, 0)
+      fem.f.SetVec(fi, fv)
+    }
+  }
+  fmt.Printf("f = %0.4v\n", mat64.Formatted(fem.f, mat64.Prefix("    ")))
+  fmt.Println()
+}
+
+// Linear-element FEM solver for beam
+// k: local stifness matrix
+// K: global stifness matrix
+// Ne: amount of element
+// No: order of shape function
+// Ng: amount of gaussian points
+// Le: lenth of each element
+// E: Young's modulus of each element
+// A: area of each element
+// d: displacement vector
+// f: force vector
+// dNod, dVal: displacement boundary condition
+// fNod, fVal: force boundary condition
+type FEMsolver1dBeam struct {
+  k, K *mat64.SymDense
+  Ne, No, Ng int
+  Le, E, I, d, f *mat64.Vector
+  dNod, fNod []int
+  dVal, fVal []float64
+}
+
+// Create a FEMsolver1dBeam
+func NewFEMsolver1dBeam(No, Ne int, Le, E, I, d, f *mat64.Vector, dNod, fNod []int, dVal, fVal []float64) *FEMsolver1dBeam {
+  k := mat64.NewSymDense(No*2, nil)
+  K := mat64.NewSymDense((No-1)*2*Ne+2, nil)
+  BuildVec(dNod, dVal, d)
+  fNod, fVal = InitF1dBeam((No-1)*2*Ne+2, dNod, fNod, fVal)
+  BuildVec(fNod, fVal, f)
+  Ng := (No+1)/2 + 1
+  return &FEMsolver1dBeam{k, K, Ne, No, Ng, Le, E, I, d, f, dNod, fNod, dVal, fVal}
+}
+
+// Create a FEMsolver1dBeam with const Le, E and I
+func NewFEMsolver1dBeamConstLeEI(No, Ne int, Le, E, I float64, d, f *mat64.Vector, dNod, fNod []int, dVal, fVal []float64) *FEMsolver1dBeam {
+
+  LeV := mat64.NewVector(Ne+1, nil)
+  EV := mat64.NewVector(Ne+1, nil)
+  IV := mat64.NewVector(Ne+1, nil)
+  for i := 0; i < Ne+1; i++ {
+    LeV.SetVec(i, Le)
+    EV.SetVec(i, E)
+    IV.SetVec(i, I)
+  }
+
+  return NewFEMsolver1dBeam(No, Ne, LeV, EV, IV, d, f, dNod, fNod, dVal, fVal)
+}
+
+// Initialize the force boundary condition
+func InitF1dBeam (Nn int, dNod, fNod []int, fVal []float64) ([]int, []float64) {
+  dNum := len(dNod)
+  fNum := len(fNod)
+  nfNum := Nn-dNum
+  nfNod := make([]int, nfNum)
+  nfVal := make([]float64, nfNum)
+  c, j, k := 0, 0, 0
+  for i := 0; i < Nn; i++ {
+    if j < dNum && dNod[j] == i {
+      j++
+    } else if c < nfNum {
+      nfNod[c] = i
+      if k < fNum && fNod[k] == i {
+        nfVal[c] = fVal[k]
+        k++
+      }
+      c++
+    }
+  }
+  return nfNod, nfVal
+}
+
+// Return shape function of e-th element
+func (fem *FEMsolver1dBeam) NElem(i, e int) func(float64) float64 {
+  Le := fem.Le.At(e, 0)
+  xe := Le * float64(e)
+  return func(x float64) float64 {
+    N := 0.0
+    switch(i) {
+    case 1:
+      N = 1 - 3*math.Pow((x-xe),2)/math.Pow(Le,2) + 2*math.Pow((x-xe),3)/math.Pow(Le,3)
+    case 2:
+      N = (x-xe) - 2*math.Pow((x-xe),2)/Le + math.Pow((x-xe),3)/math.Pow(Le,2)
+    case 3:
+      N = 3*math.Pow((x-xe),2)/math.Pow(Le,2) - 2*math.Pow((x-xe),3)/math.Pow(Le,3)
+    case 4:
+      N = -math.Pow((x-xe),2)/Le + math.Pow((x-xe),3)/math.Pow(Le,2)
+    }
+    return N
+  }
+}
+
+// Calculate local k matrix
+func (fem *FEMsolver1dBeam) CalcLocK() {
+  fmt.Println("Calc local stifness matrix ...")
+  Le := fem.Le.At(0, 0)
+  var ke float64
+  ke = 12
+  fem.k.SetSym(0, 0, ke)
+  fem.k.SetSym(2, 2, ke)
+  fem.k.SetSym(0, 2, -ke)
+  ke = 4*math.Pow(Le, 2)
+  fem.k.SetSym(1, 1, ke)
+  fem.k.SetSym(3, 3, ke)
+  fem.k.SetSym(1, 3, ke/2)
+  ke = 6*Le
+  fem.k.SetSym(0, 1, ke)
+  fem.k.SetSym(0, 3, ke)
+  fem.k.SetSym(1, 2, -ke)
+  fem.k.SetSym(2, 3, -ke)
+  if DEBUG {
+    fmt.Printf("k = %0.4v\n", mat64.Formatted(fem.k, mat64.Prefix("    ")))
+    fmt.Println()
+  }
+}
+
+// Calculate the global K matrix
+func (fem *FEMsolver1dBeam) CalcK() {
+  fmt.Println("Calc stifness matrix ...")
+  for k := 0; k < fem.Ne; k++ {
+    var kloc mat64.SymDense
+    EIL := fem.E.At(k,0)*fem.I.At(k,0)/math.Pow(fem.Le.At(k,0),3)
+    kp := k*(fem.No-1)*2
+    kloc.ScaleSym(EIL, fem.k)
+    klocR, klocC := kloc.Dims()
+    for i := 0; i < klocR; i++ {
+      for j := 0; j < klocC; j++ {
+        if j >= i {
+          glo := fem.K.At(kp+i, kp+j)
+          loc := kloc.At(i, j)
+          fem.K.SetSym(kp+i, kp+j, glo+loc)
+        }
+      }
+    }
+  }
+  if DEBUG {
+    fmt.Printf("K = %0.4v\n", mat64.Formatted(fem.K, mat64.Prefix("    ")))
+    fmt.Println()
+  }
+}
+
+// Add body force (or distributed force) b to the solver
+func (fem *FEMsolver1dBeam) AddBodyForce(b func(float64) float64) {
+}
+  fmt.Println("Add body force to force vector ...")
+  for i := 0; i < fem.Ne; i++ {
+    for j := 0; j < fem.No; j++ {
+      Nj := fem.NElem(j, i)
+      fj := GausQuad(func(x float64) float64 {return Nj(x)*b(x)},
+              float64(i)*fem.Le.At(i, 0),
+              float64(i+1)*fem.Le.At(i, 0), fem.Ng)
+      for k, v := range fem.fNod {
+        if v == (fem.No-1)*i+j {
+          fem.fVal[k] += fj
+        }
+      }
+    }
+    BuildVec(fem.fNod, fem.fVal, fem.f)
+  }
+  if DEBUG {
+    fmt.Println(fem.fNod)
+    fmt.Println(fem.fVal)
+    fmt.Printf("f = %0.4v\n", mat64.Formatted(fem.f, mat64.Prefix("    ")))
+    fmt.Println()
+  }
+
+// Solve the problem
+func (fem *FEMsolver1dBeam) Solve() {
+  fmt.Println("Solving ...")
+
+  if DEBUG {
+    fmt.Printf("f = %0.4v\n", mat64.Formatted(fem.f, mat64.Prefix("    ")))
+    fmt.Println()
+  }
+  fNum := len(fem.fNod)
+  m := mat64.NewDense(fNum, fNum+1, nil)
+  for i := 0; i < fNum; i++ {
+    for j := 0; j < fNum; j++ {
+      m.Set(i, j, fem.K.At(fem.fNod[i], fem.fNod[j]))
+    }
+    m.Set(i, fNum, fem.fVal[i])
+  }
+  if DEBUG {
+    fmt.Printf("m = %0.4v\n", mat64.Formatted(m, mat64.Prefix("    ")))
+    fmt.Println()
+  }
+
+  for i := 0; i < fNum; i++ {
+    for j := i+1; j < fNum; j++ {
+      c := m.At(j,i)/m.At(i,i)
+      row := mat64.Row(nil, j, m)
+      for k,v := range row {
+        row[k] = v - c*m.At(i,k)
+      }
+      m.SetRow(j, row)
+    }
+  }
+  if DEBUG {
+    fmt.Printf("m = %0.4v\n", mat64.Formatted(m, mat64.Prefix("    ")))
+    fmt.Println()
+  }
+
+  for i := fNum-1; i >= 0; i-- {
+    sum := 0.0
+    for j := i+1; j < fNum; j++ {
+      sum += m.At(i,j)*fem.d.At(fem.fNod[j],0)
+    }
+    fem.d.SetVec(fem.fNod[i], (m.At(i, fNum) - sum)/m.At(i,i))
+  }
+  fmt.Printf("d = %0.4v\n", mat64.Formatted(fem.d, mat64.Prefix("    ")))
+  fmt.Println()
+
+  dNum := len(fem.dNod)
+  for i := 0; i < dNum; i++ {
+    fi := fem.dNod[i]
+    for j := 0; j < fem.No*2; j++ {
+      fv := fem.f.At(fi, 0)+fem.K.At(fi, j)*fem.d.At(j, 0)
       fem.f.SetVec(fi, fv)
     }
   }

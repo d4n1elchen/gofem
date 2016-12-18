@@ -10,23 +10,43 @@ import (
 func main() {
   femsolver.DEBUG = true
 
+  // var fem femsolver.FEMsolver
+  // Ne := 2
+  // Nn := 6
+  // E := 100e+9
+  // A := 0.0001
+  // L := 2.0
+
+  // uNod := []int{0}
+  // uVal := []float64{0}
+  // u := mat64.NewVector((Nn-1)*Ne+1, nil)
+
+  // fNod := []int{}
+  // fVal := []float64{}
+  // f := mat64.NewVector((Nn-1)*Ne+1, nil)
+
+  // fem = femsolver.NewFEMsolver1dBarConstLeEA(Nn, Ne, L/float64(Ne), E, A, u, f, uNod, fNod, uVal, fVal)
+  // fem.AddBodyForce(b)
+  // fem.CalcLocK()
+  // fem.CalcK()
+  // fem.Solve()
+
   var fem femsolver.FEMsolver
-  Ne := 2
-  Nn := 6
-  E := 100e+9
-  A := 0.0001
+  Ne := 1
+  Nn := 2
+  E := 200e+9
+  I := 1e-6
   L := 2.0
 
-  uNod := []int{0}
-  uVal := []float64{0}
-  u := mat64.NewVector((Nn-1)*Ne+1, nil)
+  dNod := []int{0, 1}
+  dVal := []float64{0, 0}
+  d := mat64.NewVector(2*(Nn-1)*Ne+2, nil)
 
-  fNod := []int{}
-  fVal := []float64{}
-  f := mat64.NewVector((Nn-1)*Ne+1, nil)
+  fNod := []int{2}
+  fVal := []float64{1000}
+  f := mat64.NewVector(2*(Nn-1)*Ne+2, nil)
 
-  fem = femsolver.NewFEMsolver1dBarConstLeEA(Nn, Ne, L/float64(Ne), E, A, u, f, uNod, fNod, uVal, fVal)
-  fem.AddBodyForce(b)
+  fem = femsolver.NewFEMsolver1dBeamConstLeEI(Nn, Ne, L/float64(Ne), E, I, d, f, dNod, fNod, dVal, fVal)
   fem.CalcLocK()
   fem.CalcK()
   fem.Solve()
