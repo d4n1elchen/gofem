@@ -9,7 +9,7 @@ import (
 var DEBUG = true
 
 type FEMsolver interface {
-  AddBodyForce(func (float64) float64)
+  AddBodyForce(func (float64) float64, int)
   CalcK()
   CalcLocK()
   Solve()
@@ -62,6 +62,14 @@ func getGausQuadPoint(num int) (pt, w []float64) {
 func changeInterval(f func (float64) float64, a, b float64) func (float64) float64 {
   return func (x float64) float64 {
     return (b-a)/2 * f( (b-a)*x/2 + (a+b)/2  )
+  }
+}
+
+// Get differential of a function
+func d(f func (float64) float64) func (float64) float64 {
+  h := 0.001
+  return func (x float64) float64 {
+    return (f(x+h) - f(x-h))/(2*h)
   }
 }
 
@@ -180,14 +188,14 @@ func (fem *FEMsolver1dBar) BElem(j, e int) func(float64) float64 {
 }
 
 // Add body force (or distributed force) b to the solver
-func (fem *FEMsolver1dBar) AddBodyForce(b func(float64) float64) {
+func (fem *FEMsolver1dBar) AddBodyForce(b func(float64) float64, Ng int) {
   fmt.Println("Add body force to force vector ...")
   for i := 0; i < fem.Ne; i++ {
     for j := 0; j < fem.No; j++ {
       Nj := fem.NElem(j, i)
       fj := GausQuad(func(x float64) float64 {return Nj(x)*b(x)},
               float64(i)*fem.Le.At(i, 0),
-              float64(i+1)*fem.Le.At(i, 0), fem.Ng)
+              float64(i+1)*fem.Le.At(i, 0), Ng)
       for k, v := range fem.fNod {
         if v == (fem.No-1)*i+j {
           fem.fVal[k] += fj
@@ -377,14 +385,16 @@ func (fem *FEMsolver1dBeam) NElem(i, e int) func(float64) float64 {
   return func(x float64) float64 {
     N := 0.0
     switch(i) {
-    case 1:
+    case 0:
       N = 1 - 3*math.Pow((x-xe),2)/math.Pow(Le,2) + 2*math.Pow((x-xe),3)/math.Pow(Le,3)
-    case 2:
+    case 1:
       N = (x-xe) - 2*math.Pow((x-xe),2)/Le + math.Pow((x-xe),3)/math.Pow(Le,2)
-    case 3:
+    case 2:
       N = 3*math.Pow((x-xe),2)/math.Pow(Le,2) - 2*math.Pow((x-xe),3)/math.Pow(Le,3)
-    case 4:
+    case 3:
       N = -math.Pow((x-xe),2)/Le + math.Pow((x-xe),3)/math.Pow(Le,2)
+    default:
+      panic("Shape function out of index")
     }
     return N
   }
@@ -440,15 +450,19 @@ func (fem *FEMsolver1dBeam) CalcK() {
 }
 
 // Add body force (or distributed force) b to the solver
-func (fem *FEMsolver1dBeam) AddBodyForce(b func(float64) float64) {
-}
+func (fem *FEMsolver1dBeam) AddBodyForce(b func(float64) float64, Ng int) {
   fmt.Println("Add body force to force vector ...")
   for i := 0; i < fem.Ne; i++ {
-    for j := 0; j < fem.No; j++ {
+    for j := 0; j < fem.No*2; j++ {
       Nj := fem.NElem(j, i)
       fj := GausQuad(func(x float64) float64 {return Nj(x)*b(x)},
               float64(i)*fem.Le.At(i, 0),
-              float64(i+1)*fem.Le.At(i, 0), fem.Ng)
+              float64(i+1)*fem.Le.At(i, 0), Ng)
+      fmt.Println(Nj(0))
+      fmt.Println(Nj(2))
+      fmt.Println(b(0))
+      fmt.Println(b(2))
+      fmt.Println(fj)
       for k, v := range fem.fNod {
         if v == (fem.No-1)*i+j {
           fem.fVal[k] += fj
@@ -463,6 +477,7 @@ func (fem *FEMsolver1dBeam) AddBodyForce(b func(float64) float64) {
     fmt.Printf("f = %0.4v\n", mat64.Formatted(fem.f, mat64.Prefix("    ")))
     fmt.Println()
   }
+}
 
 // Solve the problem
 func (fem *FEMsolver1dBeam) Solve() {
