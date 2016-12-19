@@ -2,13 +2,31 @@ package main
 
 import (
   "fmt"
-  "github.com/gonum/matrix/mat64"
-  "github.com/team6612/gofem/femsolver"
   "math"
+
+  "bufio"
+  "os"
+  "strings"
+  "regexp"
+  "strconv"
+
+  "github.com/team6612/gofem/femsolver"
+
+  "github.com/gonum/matrix/mat64"
+  "github.com/gonum/plot"
+  "github.com/gonum/plot/plotter"
+  "github.com/gonum/plot/plotutil"
+  "github.com/gonum/plot/vg"
 )
 
+func check(e error) {
+  if e != nil {
+    panic(e)
+  }
+}
+
 func main() {
-  femsolver.DEBUG = true
+  femsolver.DEBUG = false
 
   // var fem femsolver.FEMsolver
   // Ne := 2
@@ -50,11 +68,48 @@ func main() {
 
   fem = femsolver.NewFEMsolver1dBeamConstLeEI(Nn, Ne, L/float64(Ne), E, I, d, f, dNod, fNod, dVal, fVal)
   // fem.AddBodyForce(q, 4)
-  fem.AddBodyForce(q1, 4)
   fem.AddBodyForce(q2, 4)
   fem.CalcLocK()
   fem.CalcK()
   fem.Solve()
+
+  p, err := plot.New()
+  if err != nil {
+    panic(err)
+  }
+
+  p.Title.Text = "Position plot"
+  p.X.Label.Text = "X"
+  p.Y.Label.Text = "Y"
+
+  pts := make(plotter.XYs, Ne+1)
+  for i := 0; i < Ne+1; i++ {
+    pts[i].X = float64(i)*L/float64(Ne)
+    pts[i].Y = -d.At(i*2, 0)
+  }
+
+  file, _ := os.Open("displacement_exact.txt")
+  scanner := bufio.NewScanner(file)
+  exact := make(plotter.XYs, 10001)
+  i := 0
+  for scanner.Scan() {
+    lineStr := strings.TrimSpace(scanner.Text())
+    s := regexp.MustCompile("\\s+").Split(lineStr, -1)
+    exact[i].X, _ = strconv.ParseFloat(s[0], 64)
+    exact[i].Y, _ = strconv.ParseFloat(s[1], 64)
+    i += 1
+  }
+  err = plotutil.AddLines(p,
+    "FEM", pts,
+    "Exact", exact)
+  if err != nil {
+    panic(err)
+  }
+
+  // Save the plot to a PNG file.
+  if err := p.Save(4*vg.Inch, 4*vg.Inch, "points.png"); err != nil {
+    panic(err)
+  }
 
   gausXSin := femsolver.GausQuad(fx, -5, 5, 3)
   analXSin := ff(5) - ff(-5)
@@ -82,16 +137,16 @@ func q(x float64) float64 {
 
 func q1(x float64) float64 {
   if x < 5 {
-    return 12
+    return 12.0
   } else {
-    return 0
+    return 24.0
   }
 }
 
 func q2(x float64) float64 {
-  if x >= 5 {
-    return 24
+  if x < 5 {
+    return 12.0+12.0/5.0*x
   } else {
-    return 0
+    return 24.0
   }
 }
