@@ -1,7 +1,12 @@
 # gofem
 Finite Element Method homework written in go
 
+
 # Installation
+```
+go get github.com/team6612/gofem
+```
+
 
 # Test
 ## Bar problem
