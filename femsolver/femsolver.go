@@ -6,13 +6,15 @@ import (
   "github.com/gonum/matrix/mat64"
 )
 
-var DEBUG = true
+var DEBUG = false
 
 type FEMsolver interface {
   AddBodyForce(func (float64) float64, int)
   CalcK()
   CalcLocK()
   Solve()
+  Disp(float64) float64
+  Stress(float64) float64
 }
 
 // Build a vector from nod and val
@@ -238,7 +240,7 @@ func (fem *FEMsolver1dBar) CalcK() {
   fmt.Println("Calc stifness matrix ...")
   for k := 0; k < fem.Ne; k++ {
     var kloc mat64.SymDense
-    EAL := fem.E.At(k,0)*fem.A.At(k,0)/fem.Le.At(k,0)
+    EAL := fem.E.At(k,0)*fem.A.At(k,0)
     kp := k*(fem.No-1)
     kloc.ScaleSym(EAL, fem.k)
     klocR, klocC := kloc.Dims()
@@ -310,6 +312,32 @@ func (fem *FEMsolver1dBar) Solve() {
   }
   fmt.Printf("f = %0.4v\n", mat64.Formatted(fem.f, mat64.Prefix("    ")))
   fmt.Println()
+}
+
+// Get displacement at x
+func (fem *FEMsolver1dBar) Disp(x float64) float64 {
+  Le := float64(fem.Le.At(0, 0))
+  e := int(x/Le)
+  result := 0.0
+  for i := 0; i < fem.No; i++ {
+    N := fem.NElem(i, e)(x)
+    result += N*fem.u.At((fem.No-1)*e+i, 0)
+  }
+  return result
+}
+
+// Get stress at x
+func (fem *FEMsolver1dBar) Stress(x float64) float64 {
+  Le := float64(fem.Le.At(0, 0))
+  e := int(x/Le)
+  E := fem.E.At(e, 0)
+  result := 0.0
+  for i := 0; i < fem.No; i++ {
+    B := fem.BElem(i, e)(x)
+    result += B*fem.u.At((fem.No-1)*e+i, 0)
+  }
+  result *= E
+  return result
 }
 
 // Linear-element FEM solver for beam
@@ -402,6 +430,11 @@ func (fem *FEMsolver1dBeam) NElem(i, e int) func(float64) float64 {
     }
     return N
   }
+}
+
+// Return derivative shape function of e-th element
+func (fem *FEMsolver1dBeam) BElem(i, e int) func(float64) float64 {
+  return d(d(fem.NElem(i, e)))
 }
 
 // Calculate local k matrix
@@ -535,3 +568,37 @@ func (fem *FEMsolver1dBeam) Solve() {
   fmt.Printf("f = %0.4v\n", mat64.Formatted(fem.f, mat64.Prefix("    ")))
   fmt.Println()
 }
+
+// Get stress at x
+func (fem *FEMsolver1dBeam) Stress(x float64) float64 {
+  Le := float64(fem.Le.At(0, 0))
+  e := int(x/Le)
+  if e > fem.Ne-1 {
+    e = fem.Ne-1
+  }
+  E := fem.E.At(e, 0)
+  y := math.Pow(fem.I.At(e, 0)*12, 1.0/4)/2
+  result := 0.0
+  for i := 0; i < fem.No*2; i++ {
+    B := fem.BElem(i, e)(x)
+    result += B*fem.d.At((fem.No-1)*2*e+i, 0)
+  }
+  result *= y*E
+  return result
+}
+
+// Get displacement at x
+func (fem *FEMsolver1dBeam) Disp(x float64) float64 {
+  Le := float64(fem.Le.At(0, 0))
+  e := int(x/Le)
+  if e > fem.Ne-1 {
+    e = fem.Ne-1
+  }
+  result := 0.0
+  for i := 0; i < fem.No*2; i++ {
+    N := fem.NElem(i, e)(x)
+    result += N*fem.d.At((fem.No-1)*2*e+i, 0)
+  }
+  return result
+}
+
